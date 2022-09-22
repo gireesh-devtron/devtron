@@ -28,16 +28,17 @@ import (
 )
 
 type TelemetryEventClientImpl struct {
-	cron            *cron.Cron
-	logger          *zap.SugaredLogger
-	client          *http.Client
-	clusterService  cluster.ClusterService
-	K8sUtil         *util2.K8sUtil
-	aCDAuthConfig   *util3.ACDAuthConfig
-	userService     user.UserService
-	attributeRepo   repository.AttributesRepository
-	ssoLoginService sso.SSOLoginService
-	PosthogClient   *PosthogClient
+	cron             *cron.Cron
+	logger           *zap.SugaredLogger
+	client           *http.Client
+	clusterService   cluster.ClusterService
+	K8sUtil          *util2.K8sUtil
+	aCDAuthConfig    *util3.ACDAuthConfig
+	userService      user.UserService
+	userAuditService user.UserAuditService
+	attributeRepo    repository.AttributesRepository
+	ssoLoginService  sso.SSOLoginService
+	PosthogClient    *PosthogClient
 }
 
 type TelemetryEventClient interface {
@@ -50,7 +51,7 @@ type TelemetryEventClient interface {
 }
 
 func NewTelemetryEventClientImpl(logger *zap.SugaredLogger, client *http.Client, clusterService cluster.ClusterService,
-	K8sUtil *util2.K8sUtil, aCDAuthConfig *util3.ACDAuthConfig, userService user.UserService,
+	K8sUtil *util2.K8sUtil, aCDAuthConfig *util3.ACDAuthConfig, userService user.UserService, userAuditService user.UserAuditService,
 	attributeRepo repository.AttributesRepository, ssoLoginService sso.SSOLoginService,
 	PosthogClient *PosthogClient) (*TelemetryEventClientImpl, error) {
 	cron := cron.New(
@@ -62,8 +63,9 @@ func NewTelemetryEventClientImpl(logger *zap.SugaredLogger, client *http.Client,
 		client: client, clusterService: clusterService,
 		K8sUtil: K8sUtil, aCDAuthConfig: aCDAuthConfig,
 		userService: userService, attributeRepo: attributeRepo,
-		ssoLoginService: ssoLoginService,
-		PosthogClient:   PosthogClient,
+		ssoLoginService:  ssoLoginService,
+		PosthogClient:    PosthogClient,
+		userAuditService: userAuditService,
 	}
 
 	watcher.HeartbeatEventForTelemetry()
@@ -91,13 +93,14 @@ type TelemetryEventEA struct {
 	EventMessage string             `json:"eventMessage,omitempty"`
 	EventType    TelemetryEventType `json:"eventType"`
 	//Summary        *SummaryEA         `json:"summary,omitempty"`
-	ServerVersion  string `json:"serverVersion,omitempty"`
-	UserCount      int    `json:"userCount,omitempty"`
-	ClusterCount   int    `json:"clusterCount,omitempty"`
-	HostURL        bool   `json:"hostURL,omitempty"`
-	SSOLogin       bool   `json:"ssoLogin,omitempty"`
-	DevtronVersion string `json:"devtronVersion,omitempty"`
-	DevtronMode    string `json:"devtronMode,omitempty"`
+	ServerVersion  string    `json:"serverVersion,omitempty"`
+	UserCount      int       `json:"userCount,omitempty"`
+	ClusterCount   int       `json:"clusterCount,omitempty"`
+	HostURL        bool      `json:"hostURL,omitempty"`
+	SSOLogin       bool      `json:"ssoLogin,omitempty"`
+	DevtronVersion string    `json:"devtronVersion,omitempty"`
+	DevtronMode    string    `json:"devtronMode,omitempty"`
+	LoginTime      time.Time `json:"loginTime,omitempty"`
 }
 
 const DevtronUniqueClientIdConfigMap = "devtron-ucid"
@@ -188,6 +191,8 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	}
 
 	clusters, users, k8sServerVersion, hostURL, ssoSetup := impl.SummaryDetailsForTelemetry()
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	loginTime := latestUser.CreatedOn
 
 	payload := &TelemetryEventEA{UCID: ucid, Timestamp: time.Now(), EventType: TelemetryEventType(eventType), DevtronVersion: "v1"}
 	payload.ServerVersion = k8sServerVersion.String()
@@ -196,6 +201,7 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	payload.SSOLogin = ssoSetup
 	payload.UserCount = len(users)
 	payload.ClusterCount = len(clusters)
+	payload.LoginTime = loginTime
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {

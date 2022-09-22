@@ -127,6 +127,7 @@ type TelemetryEventDto struct {
 	DevtronGitVersion                    string             `json:"devtronGitVersion,omitempty"`
 	DevtronVersion                       string             `json:"devtronVersion,omitempty"`
 	DevtronMode                          string             `json:"devtronMode,omitempty"`
+	LoginTime                            time.Time          `json:"loginTime,omitempty"`
 }
 
 func (impl *TelemetryEventClientImplExtended) SummaryEventForTelemetry() {
@@ -243,6 +244,10 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	deployment, err := impl.cdWorkflowRepository.ExistsByStatus("Healthy")
 
 	devtronVersion := util.GetDevtronVersion()
+
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	loginTime := latestUser.CreatedOn
+
 	payload.ProdAppCount = prodApps
 	payload.NonProdAppCount = nonProdApps
 	payload.RegistryCount = len(containerRegistry)
@@ -260,6 +265,7 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	payload.Deployment = deployment
 
 	payload.DevtronMode = devtronVersion.ServerMode
+	payload.LoginTime = loginTime
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
 		impl.logger.Errorw("SummaryEventForTelemetry, payload marshal error", "error", err)
