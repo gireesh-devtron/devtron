@@ -201,7 +201,7 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	payload.ClusterCount = len(clusters)
 
 	latestUser, err := impl.userAuditService.GetLatestUser()
-	if err != nil {
+	if err == nil {
 		loginTime := latestUser.CreatedOn
 		payload.LoginTime = loginTime
 	}

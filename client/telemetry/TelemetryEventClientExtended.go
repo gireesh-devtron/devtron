@@ -247,7 +247,7 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	devtronVersion := util.GetDevtronVersion()
 
 	latestUser, err := impl.userAuditService.GetLatestUser()
-	if err != nil {
+	if err == nil {
 		loginTime := latestUser.CreatedOn
 		payload.LoginTime = loginTime
 	}
