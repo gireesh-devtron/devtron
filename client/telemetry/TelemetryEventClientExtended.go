@@ -247,7 +247,10 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	devtronVersion := util.GetDevtronVersion()
 
 	latestUser, err := impl.userAuditService.GetLatestUser()
-	loginTime := latestUser.CreatedOn
+	if err != nil {
+		loginTime := latestUser.CreatedOn
+		payload.LoginTime = loginTime
+	}
 
 	payload.ProdAppCount = prodApps
 	payload.NonProdAppCount = nonProdApps
@@ -266,7 +269,6 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	payload.Deployment = deployment
 
 	payload.DevtronMode = devtronVersion.ServerMode
-	payload.LoginTime = loginTime
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
 		impl.logger.Errorw("SummaryEventForTelemetry, payload marshal error", "error", err)
