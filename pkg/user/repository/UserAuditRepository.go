@@ -36,6 +36,7 @@ type UserAudit struct {
 type UserAuditRepository interface {
 	Save(userAudit *UserAudit) error
 	GetLatestByUserId(userId int32) (*UserAudit, error)
+	GetLatestUser() (*UserAudit, error)
 }
 
 type UserAuditRepositoryImpl struct {
@@ -55,6 +56,15 @@ func (impl UserAuditRepositoryImpl) GetLatestByUserId(userId int32) (*UserAudit,
 	err := impl.dbConnection.Model(userAudit).
 		Where("user_id = ?", userId).
 		Order("id desc").
+		Limit(1).
+		Select()
+	return userAudit, err
+}
+
+func (impl UserAuditRepositoryImpl) GetLatestUser() (*UserAudit, error) {
+	userAudit := &UserAudit{}
+	err := impl.dbConnection.Model(userAudit).
+		Order("created_on desc").
 		Limit(1).
 		Select()
 	return userAudit, err
