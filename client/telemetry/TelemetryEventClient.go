@@ -191,8 +191,6 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	}
 
 	clusters, users, k8sServerVersion, hostURL, ssoSetup := impl.SummaryDetailsForTelemetry()
-	latestUser, err := impl.userAuditService.GetLatestUser()
-	loginTime := latestUser.CreatedOn
 
 	payload := &TelemetryEventEA{UCID: ucid, Timestamp: time.Now(), EventType: TelemetryEventType(eventType), DevtronVersion: "v1"}
 	payload.ServerVersion = k8sServerVersion.String()
@@ -201,7 +199,12 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	payload.SSOLogin = ssoSetup
 	payload.UserCount = len(users)
 	payload.ClusterCount = len(clusters)
-	payload.LoginTime = loginTime
+
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	if err != nil {
+		loginTime := latestUser.CreatedOn
+		payload.LoginTime = loginTime
+	}
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
