@@ -131,7 +131,7 @@ func InitializeApp() (*App, error) {
 	ssoLoginRouterImpl := sso2.NewSsoLoginRouterImpl(ssoLoginRestHandlerImpl)
 	teamRepositoryImpl := team.NewTeamRepositoryImpl(db)
 	loginService := middleware.NewUserLogin(sessionManager, k8sClient)
-	userAuthServiceImpl := user.NewUserAuthServiceImpl(userAuthRepositoryImpl, sessionManager, loginService, sugaredLogger, userRepositoryImpl, roleGroupRepositoryImpl)
+	userAuthServiceImpl := user.NewUserAuthServiceImpl(userAuthRepositoryImpl, sessionManager, loginService, sugaredLogger, userRepositoryImpl, userAuditRepositoryImpl, roleGroupRepositoryImpl)
 	teamServiceImpl := team.NewTeamServiceImpl(sugaredLogger, teamRepositoryImpl, userAuthServiceImpl)
 	clusterRepositoryImpl := repository2.NewClusterRepositoryImpl(db, sugaredLogger)
 	v := informer.NewGlobalMapClusterNamespace()
@@ -226,7 +226,7 @@ func InitializeApp() (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	telemetryEventClientImpl, err := telemetry.NewTelemetryEventClientImpl(sugaredLogger, httpClient, clusterServiceImpl, k8sUtil, acdAuthConfig, userServiceImpl, attributesRepositoryImpl, ssoLoginServiceImpl, posthogClient)
+	telemetryEventClientImpl, err := telemetry.NewTelemetryEventClientImpl(sugaredLogger, httpClient, clusterServiceImpl, k8sUtil, acdAuthConfig, userServiceImpl, userAuditServiceImpl, attributesRepositoryImpl, ssoLoginServiceImpl, posthogClient)
 	if err != nil {
 		return nil, err
 	}

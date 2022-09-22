@@ -26,6 +26,7 @@ import (
 	"github.com/devtron-labs/authenticator/middleware"
 	casbin2 "github.com/devtron-labs/devtron/pkg/user/casbin"
 	repository2 "github.com/devtron-labs/devtron/pkg/user/repository"
+	util2 "github.com/devtron-labs/devtron/util"
 	"github.com/go-pg/pg"
 	"log"
 	"math/rand"
@@ -61,6 +62,7 @@ type UserAuthServiceImpl struct {
 	sessionClient       session2.ServiceClient
 	logger              *zap.SugaredLogger
 	userRepository      repository2.UserRepository
+	userAuditRepository repository2.UserAuditRepository
 	sessionManager      *middleware.SessionManager
 	roleGroupRepository repository2.RoleGroupRepository
 }
@@ -106,7 +108,7 @@ type WebhookToken struct {
 }
 
 func NewUserAuthServiceImpl(userAuthRepository repository2.UserAuthRepository, sessionManager *middleware.SessionManager,
-	client session2.ServiceClient, logger *zap.SugaredLogger, userRepository repository2.UserRepository,
+	client session2.ServiceClient, logger *zap.SugaredLogger, userRepository repository2.UserRepository, userAuditRepository repository2.UserAuditRepository,
 	roleGroupRepository repository2.RoleGroupRepository) *UserAuthServiceImpl {
 	serviceImpl := &UserAuthServiceImpl{
 		userAuthRepository:  userAuthRepository,
@@ -114,6 +116,7 @@ func NewUserAuthServiceImpl(userAuthRepository repository2.UserAuthRepository, s
 		sessionClient:       client,
 		logger:              logger,
 		userRepository:      userRepository,
+		userAuditRepository: userAuditRepository,
 		roleGroupRepository: roleGroupRepository,
 	}
 	cStore = sessions.NewCookieStore(randKey())
@@ -332,6 +335,16 @@ func (impl UserAuthServiceImpl) HandleDexCallback(w http.ResponseWriter, r *http
 		// If there is an error in creating the JWT return an internal server error
 		w.WriteHeader(http.StatusInternalServerError)
 		return
+	}
+	clientIp := util2.GetClientIP(r)
+	model := repository2.UserAudit{
+		UserId:    dbUser.UserId,
+		ClientIp:  clientIp,
+		CreatedOn: time.Now(),
+	}
+	err = impl.userAuditRepository.Save(&model)
+	if err != nil {
+		impl.logger.Errorw("error occurred while saving user audit", "err", err)
 	}
 
 	// Set some session values.
