@@ -26,6 +26,7 @@ import (
 	"github.com/devtron-labs/authenticator/middleware"
 	casbin2 "github.com/devtron-labs/devtron/pkg/user/casbin"
 	repository2 "github.com/devtron-labs/devtron/pkg/user/repository"
+	util2 "github.com/devtron-labs/devtron/util"
 	"github.com/go-pg/pg"
 	"log"
 	"math/rand"
@@ -63,6 +64,7 @@ type UserAuthServiceImpl struct {
 	userRepository      repository2.UserRepository
 	sessionManager      *middleware.SessionManager
 	roleGroupRepository repository2.RoleGroupRepository
+	userAuditRepository repository2.UserAuditRepository
 }
 
 var (
@@ -107,7 +109,7 @@ type WebhookToken struct {
 
 func NewUserAuthServiceImpl(userAuthRepository repository2.UserAuthRepository, sessionManager *middleware.SessionManager,
 	client session2.ServiceClient, logger *zap.SugaredLogger, userRepository repository2.UserRepository,
-	roleGroupRepository repository2.RoleGroupRepository) *UserAuthServiceImpl {
+	roleGroupRepository repository2.RoleGroupRepository, userAuditRepository repository2.UserAuditRepository) *UserAuthServiceImpl {
 	serviceImpl := &UserAuthServiceImpl{
 		userAuthRepository:  userAuthRepository,
 		sessionManager:      sessionManager,
@@ -115,6 +117,7 @@ func NewUserAuthServiceImpl(userAuthRepository repository2.UserAuthRepository, s
 		logger:              logger,
 		userRepository:      userRepository,
 		roleGroupRepository: roleGroupRepository,
+		userAuditRepository: userAuditRepository,
 	}
 	cStore = sessions.NewCookieStore(randKey())
 	return serviceImpl
@@ -253,7 +256,32 @@ func (impl UserAuthServiceImpl) HandleRefresh(w http.ResponseWriter, r *http.Req
 }
 
 func (impl UserAuthServiceImpl) HandleLogin(username string, password string) (string, error) {
-	return impl.sessionClient.Create(context.Background(), username, password)
+	res, err := impl.sessionClient.Create(context.Background(), username, password)
+	if err != nil {
+		return res, err
+	}
+	adminName := "admin"
+	adminEmail := "admin"
+	if strings.Compare(username, adminName) == 0 {
+		dbUser, err := impl.userRepository.FetchUserDetailByEmail(adminEmail)
+		if err != nil {
+			impl.logger.Errorw("Exception while fetching user from db", "err", err)
+		}
+		if dbUser.Id > 0 {
+			//dont know what to put in clinet ip,modify it later
+			clientIp := "localhost"
+			model := repository2.UserAudit{
+				UserId:    dbUser.UserId,
+				ClientIp:  clientIp,
+				CreatedOn: time.Now(),
+			}
+			err = impl.userAuditRepository.Save(&model)
+			if err != nil {
+				impl.logger.Errorw("error occurred while saving user audit", "err", err)
+			}
+		}
+	}
+	return res, err
 }
 
 func (impl UserAuthServiceImpl) HandleDexCallback(w http.ResponseWriter, r *http.Request) {
@@ -334,6 +362,16 @@ func (impl UserAuthServiceImpl) HandleDexCallback(w http.ResponseWriter, r *http
 		return
 	}
 
+	clientIp := util2.GetClientIP(r)
+	model := repository2.UserAudit{
+		UserId:    dbUser.UserId,
+		ClientIp:  clientIp,
+		CreatedOn: time.Now(),
+	}
+	err = impl.userAuditRepository.Save(&model)
+	if err != nil {
+		impl.logger.Errorw("error occurred while saving user audit", "err", err)
+	}
 	// Set some session values.
 	session.Values["jwtToken"] = tokenString
 	session.Values["authenticated"] = true
