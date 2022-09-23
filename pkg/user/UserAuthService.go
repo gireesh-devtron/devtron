@@ -256,7 +256,32 @@ func (impl UserAuthServiceImpl) HandleRefresh(w http.ResponseWriter, r *http.Req
 }
 
 func (impl UserAuthServiceImpl) HandleLogin(username string, password string) (string, error) {
-	return impl.sessionClient.Create(context.Background(), username, password)
+	res, err := impl.sessionClient.Create(context.Background(), username, password)
+	if err != nil {
+		return res, err
+	}
+	adminName := "admin"
+	adminEmail := "admin"
+	if strings.Compare(username, adminName) == 0 {
+		dbUser, err := impl.userRepository.FetchUserDetailByEmail(adminEmail)
+		if err != nil {
+			impl.logger.Errorw("Exception while fetching user from db", "err", err)
+		}
+		if dbUser.Id > 0 {
+			//dont know what to put in clinet ip,modify it later
+			clientIp := "localhost"
+			model := repository2.UserAudit{
+				UserId:    dbUser.UserId,
+				ClientIp:  clientIp,
+				CreatedOn: time.Now(),
+			}
+			err = impl.userAuditRepository.Save(&model)
+			if err != nil {
+				impl.logger.Errorw("error occurred while saving user audit", "err", err)
+			}
+		}
+	}
+	return res, err
 }
 
 func (impl UserAuthServiceImpl) HandleDexCallback(w http.ResponseWriter, r *http.Request) {

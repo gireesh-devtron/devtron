@@ -22,6 +22,7 @@ package repository
 
 import (
 	"github.com/go-pg/pg"
+	"go.uber.org/zap"
 	"time"
 )
 
@@ -41,10 +42,11 @@ type UserAuditRepository interface {
 
 type UserAuditRepositoryImpl struct {
 	dbConnection *pg.DB
+	logger       *zap.SugaredLogger
 }
 
-func NewUserAuditRepositoryImpl(dbConnection *pg.DB) *UserAuditRepositoryImpl {
-	return &UserAuditRepositoryImpl{dbConnection: dbConnection}
+func NewUserAuditRepositoryImpl(dbConnection *pg.DB, logger *zap.SugaredLogger) *UserAuditRepositoryImpl {
+	return &UserAuditRepositoryImpl{dbConnection: dbConnection, logger: logger}
 }
 
 func (impl UserAuditRepositoryImpl) Save(userAudit *UserAudit) error {
@@ -63,6 +65,10 @@ func (impl UserAuditRepositoryImpl) GetLatestByUserId(userId int32) (*UserAudit,
 
 func (impl UserAuditRepositoryImpl) GetLatestUser() (*UserAudit, error) {
 	userAudit := &UserAudit{}
+	if impl.dbConnection == nil {
+		impl.logger.Info("connection to the db lost", "got null db connection")
+		return nil, pg.ErrNoRows
+	}
 	err := impl.dbConnection.Model(userAudit).
 		Order("created_on desc").
 		Limit(1).
