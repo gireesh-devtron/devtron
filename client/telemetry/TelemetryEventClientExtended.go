@@ -48,7 +48,7 @@ func NewTelemetryEventClientImplExtended(logger *zap.SugaredLogger, client *http
 	ciWorkflowRepository pipelineConfig.CiWorkflowRepository, cdWorkflowRepository pipelineConfig.CdWorkflowRepository,
 	dockerArtifactStoreRepository repository.DockerArtifactStoreRepository,
 	materialRepository pipelineConfig.MaterialRepository, ciTemplateRepository pipelineConfig.CiTemplateRepository,
-	chartRepository chartRepoRepository.ChartRepository) (*TelemetryEventClientImplExtended, error) {
+	chartRepository chartRepoRepository.ChartRepository, userAuditService user.UserAuditService) (*TelemetryEventClientImplExtended, error) {
 
 	cron := cron.New(
 		cron.WithChain())
@@ -68,16 +68,17 @@ func NewTelemetryEventClientImplExtended(logger *zap.SugaredLogger, client *http
 		ciTemplateRepository:          ciTemplateRepository,
 		chartRepository:               chartRepository,
 		TelemetryEventClientImpl: &TelemetryEventClientImpl{
-			cron:            cron,
-			logger:          logger,
-			client:          client,
-			clusterService:  clusterService,
-			K8sUtil:         K8sUtil,
-			aCDAuthConfig:   aCDAuthConfig,
-			userService:     userService,
-			attributeRepo:   attributeRepo,
-			ssoLoginService: ssoLoginService,
-			PosthogClient:   PosthogClient,
+			cron:             cron,
+			logger:           logger,
+			client:           client,
+			clusterService:   clusterService,
+			K8sUtil:          K8sUtil,
+			aCDAuthConfig:    aCDAuthConfig,
+			userService:      userService,
+			attributeRepo:    attributeRepo,
+			ssoLoginService:  ssoLoginService,
+			PosthogClient:    PosthogClient,
+			userAuditService: userAuditService,
 		},
 	}
 
@@ -127,6 +128,7 @@ type TelemetryEventDto struct {
 	DevtronGitVersion                    string             `json:"devtronGitVersion,omitempty"`
 	DevtronVersion                       string             `json:"devtronVersion,omitempty"`
 	DevtronMode                          string             `json:"devtronMode,omitempty"`
+	LoginTime                            time.Time          `json:"loginTime,omitempty"`
 }
 
 func (impl *TelemetryEventClientImplExtended) SummaryEventForTelemetry() {
@@ -241,6 +243,12 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	build, err := impl.ciWorkflowRepository.ExistsByStatus("Succeeded")
 
 	deployment, err := impl.cdWorkflowRepository.ExistsByStatus("Healthy")
+
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	if err == nil {
+		loginTime := latestUser.CreatedOn
+		payload.LoginTime = loginTime
+	}
 
 	devtronVersion := util.GetDevtronVersion()
 	payload.ProdAppCount = prodApps
