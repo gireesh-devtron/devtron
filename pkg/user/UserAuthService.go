@@ -256,6 +256,7 @@ func (impl UserAuthServiceImpl) HandleRefresh(w http.ResponseWriter, r *http.Req
 }
 
 func (impl UserAuthServiceImpl) HandleLogin(username string, password string) (string, error) {
+	impl.logger.Info("handling user login")
 	res, err := impl.sessionClient.Create(context.Background(), username, password)
 	if err != nil {
 		return res, err
@@ -362,6 +363,7 @@ func (impl UserAuthServiceImpl) HandleDexCallback(w http.ResponseWriter, r *http
 		return
 	}
 
+	impl.logger.Info("preparing user audit data...")
 	clientIp := util2.GetClientIP(r)
 	model := repository2.UserAudit{
 		UserId:    dbUser.UserId,
