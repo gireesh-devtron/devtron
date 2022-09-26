@@ -1,6 +1,7 @@
 package restHandler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/devtron-labs/devtron/api/restHandler/common"
@@ -17,6 +18,7 @@ import (
 	"github.com/devtron-labs/devtron/pkg/team"
 	"github.com/devtron-labs/devtron/pkg/user"
 	"github.com/devtron-labs/devtron/pkg/user/casbin"
+	"github.com/devtron-labs/devtron/util/argo"
 	"github.com/devtron-labs/devtron/util/rbac"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
@@ -28,6 +30,10 @@ type BulkUpdateRestHandler interface {
 	FindBulkUpdateReadme(w http.ResponseWriter, r *http.Request)
 	GetImpactedAppsName(w http.ResponseWriter, r *http.Request)
 	BulkUpdate(w http.ResponseWriter, r *http.Request)
+
+	BulkHibernate(w http.ResponseWriter, r *http.Request)
+	BulkUnHibernate(w http.ResponseWriter, r *http.Request)
+	BulkDeploy(w http.ResponseWriter, r *http.Request)
 }
 type BulkUpdateRestHandlerImpl struct {
 	pipelineBuilder         pipeline.PipelineBuilder
@@ -55,6 +61,7 @@ type BulkUpdateRestHandlerImpl struct {
 	materialRepository      pipelineConfig.MaterialRepository
 	policyService           security2.PolicyService
 	scanResultRepository    security.ImageScanResultRepository
+	argoUserService         argo.ArgoUserService
 }
 
 func NewBulkUpdateRestHandlerImpl(pipelineBuilder pipeline.PipelineBuilder, logger *zap.SugaredLogger,
@@ -76,7 +83,8 @@ func NewBulkUpdateRestHandlerImpl(pipelineBuilder pipeline.PipelineBuilder, logg
 	appCloneService appClone.AppCloneService,
 	appWorkflowService appWorkflow.AppWorkflowService,
 	materialRepository pipelineConfig.MaterialRepository, policyService security2.PolicyService,
-	scanResultRepository security.ImageScanResultRepository) *BulkUpdateRestHandlerImpl {
+	scanResultRepository security.ImageScanResultRepository,
+	argoUserService argo.ArgoUserService) *BulkUpdateRestHandlerImpl {
 	return &BulkUpdateRestHandlerImpl{
 		pipelineBuilder:         pipelineBuilder,
 		logger:                  logger,
@@ -103,6 +111,7 @@ func NewBulkUpdateRestHandlerImpl(pipelineBuilder pipeline.PipelineBuilder, logg
 		materialRepository:      materialRepository,
 		policyService:           policyService,
 		scanResultRepository:    scanResultRepository,
+		argoUserService:         argoUserService,
 	}
 }
 
@@ -234,5 +243,76 @@ func (handler BulkUpdateRestHandlerImpl) BulkUpdate(w http.ResponseWriter, r *ht
 	}
 
 	response := handler.bulkUpdateService.BulkUpdate(script.Spec)
+	common.WriteJsonResp(w, nil, response, http.StatusOK)
+}
+
+func (handler BulkUpdateRestHandlerImpl) BulkHibernate(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var request pipeline.BulkApplicationForEnvironmentPayload
+	err := decoder.Decode(&request)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	err = handler.validator.Struct(request)
+	if err != nil {
+		handler.logger.Errorw("validation err", "err", err, "request", request)
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+
+	acdToken, err := handler.argoUserService.GetLatestDevtronArgoCdUserToken()
+	if err != nil {
+		handler.logger.Errorw("error in getting acd token", "err", err)
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
+	ctx := context.WithValue(r.Context(), "token", acdToken)
+
+	response, err := handler.bulkUpdateService.BulkHibernate(&request, ctx)
+	common.WriteJsonResp(w, nil, response, http.StatusOK)
+}
+
+func (handler BulkUpdateRestHandlerImpl) BulkUnHibernate(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var request pipeline.BulkApplicationForEnvironmentPayload
+	err := decoder.Decode(&request)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	err = handler.validator.Struct(request)
+	if err != nil {
+		handler.logger.Errorw("validation err", "err", err, "request", request)
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+
+	acdToken, err := handler.argoUserService.GetLatestDevtronArgoCdUserToken()
+	if err != nil {
+		handler.logger.Errorw("error in getting acd token", "err", err)
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
+	ctx := context.WithValue(r.Context(), "token", acdToken)
+	response, err := handler.bulkUpdateService.BulkUnHibernate(&request, ctx)
+	common.WriteJsonResp(w, nil, response, http.StatusOK)
+}
+
+func (handler BulkUpdateRestHandlerImpl) BulkDeploy(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
+	var request pipeline.BulkApplicationForEnvironmentPayload
+	err := decoder.Decode(&request)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	err = handler.validator.Struct(request)
+	if err != nil {
+		handler.logger.Errorw("validation err", "err", err, "request", request)
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	response, err := handler.bulkUpdateService.BulkDeploy(&request)
 	common.WriteJsonResp(w, nil, response, http.StatusOK)
 }
