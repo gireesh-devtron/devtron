@@ -1063,7 +1063,7 @@ func (impl BulkUpdateServiceImpl) BulkHibernate(request *BulkApplicationForEnvir
 			//initiate helm hibernate service
 		}
 	}
-	return nil, nil
+	return request, nil
 }
 func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
 	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
@@ -1097,7 +1097,7 @@ func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnv
 			//initiate helm hibernate service
 		}
 	}
-	return nil, nil
+	return request, nil
 }
 func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
 	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
@@ -1145,5 +1145,5 @@ func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironm
 			//initiate helm hibernate service
 		}
 	}
-	return nil, nil
+	return request, nil
 }
