@@ -269,8 +269,8 @@ func (handler BulkUpdateRestHandlerImpl) BulkHibernate(w http.ResponseWriter, r 
 		return
 	}
 	ctx := context.WithValue(r.Context(), "token", acdToken)
-
-	response, err := handler.bulkUpdateService.BulkHibernate(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	token := r.Header.Get("token")
+	response, err := handler.bulkUpdateService.BulkHibernate(&request, ctx, w, token, handler.checkAuthForBulkActions)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
 		return
@@ -300,7 +300,8 @@ func (handler BulkUpdateRestHandlerImpl) BulkUnHibernate(w http.ResponseWriter, 
 		return
 	}
 	ctx := context.WithValue(r.Context(), "token", acdToken)
-	response, err := handler.bulkUpdateService.BulkUnHibernate(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	token := r.Header.Get("token")
+	response, err := handler.bulkUpdateService.BulkUnHibernate(&request, ctx, w, token, handler.checkAuthForBulkActions)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
 		return
@@ -329,7 +330,8 @@ func (handler BulkUpdateRestHandlerImpl) BulkDeploy(w http.ResponseWriter, r *ht
 		return
 	}
 	ctx := context.WithValue(r.Context(), "token", acdToken)
-	response, err := handler.bulkUpdateService.BulkDeploy(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	token := r.Header.Get("token")
+	response, err := handler.bulkUpdateService.BulkDeploy(&request, ctx, w, token, handler.checkAuthForBulkActions)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
 		return
