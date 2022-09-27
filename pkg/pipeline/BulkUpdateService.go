@@ -32,6 +32,9 @@ import (
 type NameIncludesExcludes struct {
 	Names []string `json:"names"`
 }
+type IdIncludesExcludes struct {
+	Ids []int `json:"Ids"`
+}
 type DeploymentTemplateSpec struct {
 	PatchJson string `json:"patchJson"`
 }
@@ -110,10 +113,12 @@ type CmAndSecretBulkUpdateResponse struct {
 }
 
 type BulkApplicationForEnvironmentPayload struct {
-	Includes *NameIncludesExcludes `json:"includes"`
-	Excludes *NameIncludesExcludes `json:"excludes"`
-	EnvId    int                   `json:"envId"`
-	UserId   int32                 `json:"-"`
+	Includes      *NameIncludesExcludes `json:"includes"`
+	Excludes      *NameIncludesExcludes `json:"excludes"`
+	AppIdIncludes *IdIncludesExcludes   `json:"appIdIncludes"`
+	EnvId         int                   `json:"envId"`
+	UserId        int32                 `json:"-"`
+	Response      map[int]map[int]bool  `json:"response"`
 }
 
 type BulkUpdateService interface {
@@ -1032,17 +1037,33 @@ func (impl BulkUpdateServiceImpl) BulkUpdate(bulkUpdatePayload *BulkUpdatePayloa
 }
 
 func (impl BulkUpdateServiceImpl) BulkHibernate(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
-	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
+	var pipelines []*pipelineConfig.Pipeline
+	var err error
+	if len(request.AppIdIncludes.Ids) > 0 {
+		pipelines, err = impl.pipelineRepository.FindActiveByEnvIdAndAppIds(request.EnvId, request.AppIdIncludes.Ids)
+	} else {
+		pipelines, err = impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
+	}
 	if err != nil {
 		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
+	response := make(map[int]map[int]bool)
 	for _, pipeline := range pipelines {
+		success := true
+		if _, ok := response[pipeline.AppId]; !ok {
+			pResponse := make(map[int]bool)
+			pResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pResponse
+		}
 		appObject := impl.enforcerUtil.GetAppRBACNameByAppId(pipeline.AppId)
 		envObject := impl.enforcerUtil.GetEnvRBACNameByAppId(pipeline.AppId, pipeline.EnvironmentId)
 		isValidAuth := checkAuthForBulkActions(token, appObject, envObject)
 		if !isValidAuth {
 			//skip hibernate for the app if user does not have access on that
+			pipelineResponse := response[pipeline.AppId]
+			pipelineResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pipelineResponse
 			continue
 		}
 
@@ -1056,13 +1077,22 @@ func (impl BulkUpdateServiceImpl) BulkHibernate(request *BulkApplicationForEnvir
 			_, err := impl.workflowDagExecutor.StopStartApp(stopRequest, ctx)
 			if err != nil {
 				impl.logger.Errorw("service err, StartStopApp", "err", err, "stopRequest", stopRequest)
-				return nil, err
+				pipelineResponse := response[pipeline.AppId]
+				pipelineResponse[pipeline.Id] = false
+				response[pipeline.AppId] = pipelineResponse
+				continue
+				//here on any error comes for any pipeline will be skipped
+				//return nil, err
 			}
 		} else if pipeline.DeploymentAppType == util.PIPELINE_DEPLOYMENT_TYPE_HELM {
 			//TODO
 			//initiate helm hibernate service
 		}
+		pipelineResponse := response[pipeline.AppId]
+		pipelineResponse[pipeline.Id] = success
+		response[pipeline.AppId] = pipelineResponse
 	}
+	request.Response = response
 	return request, nil
 }
 func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
@@ -1071,12 +1101,22 @@ func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnv
 		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
+	response := make(map[int]map[int]bool)
 	for _, pipeline := range pipelines {
+		success := true
+		if _, ok := response[pipeline.AppId]; !ok {
+			pResponse := make(map[int]bool)
+			pResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pResponse
+		}
 		appObject := impl.enforcerUtil.GetAppRBACNameByAppId(pipeline.AppId)
 		envObject := impl.enforcerUtil.GetEnvRBACNameByAppId(pipeline.AppId, pipeline.EnvironmentId)
 		isValidAuth := checkAuthForBulkActions(token, appObject, envObject)
 		if !isValidAuth {
 			//skip hibernate for the app if user does not have access on that
+			pipelineResponse := response[pipeline.AppId]
+			pipelineResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pipelineResponse
 			continue
 		}
 
@@ -1090,13 +1130,20 @@ func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnv
 			_, err := impl.workflowDagExecutor.StopStartApp(stopRequest, ctx)
 			if err != nil {
 				impl.logger.Errorw("service err, StartStopApp", "err", err, "stopRequest", stopRequest)
-				return nil, err
+				pipelineResponse := response[pipeline.AppId]
+				pipelineResponse[pipeline.Id] = false
+				response[pipeline.AppId] = pipelineResponse
+				//return nil, err
 			}
 		} else if pipeline.DeploymentAppType == util.PIPELINE_DEPLOYMENT_TYPE_HELM {
 			//TODO
 			//initiate helm hibernate service
 		}
+		pipelineResponse := response[pipeline.AppId]
+		pipelineResponse[pipeline.Id] = success
+		response[pipeline.AppId] = pipelineResponse
 	}
+	request.Response = response
 	return request, nil
 }
 func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
@@ -1105,8 +1152,14 @@ func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironm
 		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
-
+	response := make(map[int]map[int]bool)
 	for _, pipeline := range pipelines {
+		success := true
+		if _, ok := response[pipeline.AppId]; !ok {
+			pResponse := make(map[int]bool)
+			pResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pResponse
+		}
 		appObject := impl.enforcerUtil.GetAppRBACNameByAppId(pipeline.AppId)
 		envObject := impl.enforcerUtil.GetEnvRBACNameByAppId(pipeline.AppId, pipeline.EnvironmentId)
 		isValidAuth := checkAuthForBulkActions(token, appObject, envObject)
@@ -1124,6 +1177,9 @@ func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironm
 		artifacts := artifactResponse.CiArtifacts
 		if len(artifacts) == 0 {
 			//there is no artifacts found for this pipeline, skip cd trigger
+			pipelineResponse := response[pipeline.AppId]
+			pipelineResponse[pipeline.Id] = false
+			response[pipeline.AppId] = pipelineResponse
 			continue
 		}
 		artifact := artifacts[0]
@@ -1138,12 +1194,19 @@ func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironm
 			_, err := impl.workflowDagExecutor.ManualCdTrigger(overrideRequest, nil)
 			if err != nil {
 				impl.logger.Errorw("request err, OverrideConfig", "err", err, "payload", overrideRequest)
-				return nil, err
+				pipelineResponse := response[pipeline.AppId]
+				pipelineResponse[pipeline.Id] = false
+				response[pipeline.AppId] = pipelineResponse
+				//return nil, err
 			}
 		} else if pipeline.DeploymentAppType == util.PIPELINE_DEPLOYMENT_TYPE_HELM {
 			//TODO
 			//initiate helm hibernate service
 		}
+		pipelineResponse := response[pipeline.AppId]
+		pipelineResponse[pipeline.Id] = success
+		response[pipeline.AppId] = pipelineResponse
 	}
+	request.Response = response
 	return request, nil
 }
