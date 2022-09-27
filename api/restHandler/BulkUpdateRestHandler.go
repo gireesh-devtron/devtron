@@ -248,13 +248,19 @@ func (handler BulkUpdateRestHandlerImpl) BulkUpdate(w http.ResponseWriter, r *ht
 }
 
 func (handler BulkUpdateRestHandlerImpl) BulkHibernate(w http.ResponseWriter, r *http.Request) {
+	userId, err := handler.userAuthService.GetLoggedInUser(r)
+	if userId == 0 || err != nil {
+		common.WriteJsonResp(w, err, "Unauthorized User", http.StatusUnauthorized)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	var request pipeline.BulkApplicationForEnvironmentPayload
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
 		return
 	}
+	request.UserId = userId
 	err = handler.validator.Struct(request)
 	if err != nil {
 		handler.logger.Errorw("validation err", "err", err, "request", request)
@@ -279,13 +285,19 @@ func (handler BulkUpdateRestHandlerImpl) BulkHibernate(w http.ResponseWriter, r 
 }
 
 func (handler BulkUpdateRestHandlerImpl) BulkUnHibernate(w http.ResponseWriter, r *http.Request) {
+	userId, err := handler.userAuthService.GetLoggedInUser(r)
+	if userId == 0 || err != nil {
+		common.WriteJsonResp(w, err, "Unauthorized User", http.StatusUnauthorized)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	var request pipeline.BulkApplicationForEnvironmentPayload
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
 		return
 	}
+	request.UserId = userId
 	err = handler.validator.Struct(request)
 	if err != nil {
 		handler.logger.Errorw("validation err", "err", err, "request", request)
@@ -310,13 +322,19 @@ func (handler BulkUpdateRestHandlerImpl) BulkUnHibernate(w http.ResponseWriter, 
 }
 
 func (handler BulkUpdateRestHandlerImpl) BulkDeploy(w http.ResponseWriter, r *http.Request) {
+	userId, err := handler.userAuthService.GetLoggedInUser(r)
+	if userId == 0 || err != nil {
+		common.WriteJsonResp(w, err, "Unauthorized User", http.StatusUnauthorized)
+		return
+	}
 	decoder := json.NewDecoder(r.Body)
 	var request pipeline.BulkApplicationForEnvironmentPayload
-	err := decoder.Decode(&request)
+	err = decoder.Decode(&request)
 	if err != nil {
 		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
 		return
 	}
+	request.UserId = userId
 	err = handler.validator.Struct(request)
 	if err != nil {
 		handler.logger.Errorw("validation err", "err", err, "request", request)

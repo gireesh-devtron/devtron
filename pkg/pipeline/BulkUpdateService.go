@@ -1034,7 +1034,7 @@ func (impl BulkUpdateServiceImpl) BulkUpdate(bulkUpdatePayload *BulkUpdatePayloa
 func (impl BulkUpdateServiceImpl) BulkHibernate(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
 	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
 	if err != nil {
-		impl.logger.Errorw("error in fetching pipeline", "envId", request.EnvId, "err", err)
+		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
 	for _, pipeline := range pipelines {
@@ -1068,7 +1068,7 @@ func (impl BulkUpdateServiceImpl) BulkHibernate(request *BulkApplicationForEnvir
 func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
 	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
 	if err != nil {
-		impl.logger.Errorw("error in fetching pipeline", "envId", request.EnvId, "err", err)
+		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
 	for _, pipeline := range pipelines {
@@ -1102,7 +1102,7 @@ func (impl BulkUpdateServiceImpl) BulkUnHibernate(request *BulkApplicationForEnv
 func (impl BulkUpdateServiceImpl) BulkDeploy(request *BulkApplicationForEnvironmentPayload, ctx context.Context, w http.ResponseWriter, token string, checkAuthForBulkActions func(token string, appObject string, envObject string) bool) (*BulkApplicationForEnvironmentPayload, error) {
 	pipelines, err := impl.pipelineRepository.FindActiveByEnvId(request.EnvId)
 	if err != nil {
-		impl.logger.Errorw("error in fetching pipeline", "envId", request.EnvId, "err", err)
+		impl.logger.Errorw("error in fetching pipelines", "envId", request.EnvId, "err", err)
 		return nil, err
 	}
 
