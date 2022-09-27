@@ -24,6 +24,7 @@ import (
 	"go.uber.org/zap"
 	"gopkg.in/go-playground/validator.v9"
 	"net/http"
+	"strings"
 )
 
 type BulkUpdateRestHandler interface {
@@ -269,7 +270,11 @@ func (handler BulkUpdateRestHandlerImpl) BulkHibernate(w http.ResponseWriter, r 
 	}
 	ctx := context.WithValue(r.Context(), "token", acdToken)
 
-	response, err := handler.bulkUpdateService.BulkHibernate(&request, ctx)
+	response, err := handler.bulkUpdateService.BulkHibernate(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
 	common.WriteJsonResp(w, nil, response, http.StatusOK)
 }
 
@@ -295,7 +300,11 @@ func (handler BulkUpdateRestHandlerImpl) BulkUnHibernate(w http.ResponseWriter, 
 		return
 	}
 	ctx := context.WithValue(r.Context(), "token", acdToken)
-	response, err := handler.bulkUpdateService.BulkUnHibernate(&request, ctx)
+	response, err := handler.bulkUpdateService.BulkUnHibernate(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
 	common.WriteJsonResp(w, nil, response, http.StatusOK)
 }
 
@@ -313,6 +322,27 @@ func (handler BulkUpdateRestHandlerImpl) BulkDeploy(w http.ResponseWriter, r *ht
 		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
 		return
 	}
-	response, err := handler.bulkUpdateService.BulkDeploy(&request)
+	acdToken, err := handler.argoUserService.GetLatestDevtronArgoCdUserToken()
+	if err != nil {
+		handler.logger.Errorw("error in getting acd token", "err", err)
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
+	ctx := context.WithValue(r.Context(), "token", acdToken)
+	response, err := handler.bulkUpdateService.BulkDeploy(&request, ctx, w, acdToken, handler.checkAuthForBulkActions)
+	if err != nil {
+		common.WriteJsonResp(w, err, nil, http.StatusInternalServerError)
+		return
+	}
 	common.WriteJsonResp(w, nil, response, http.StatusOK)
+}
+
+func (handler BulkUpdateRestHandlerImpl) checkAuthForBulkActions(token string, appObject string, envObject string) bool {
+	if ok := handler.enforcer.Enforce(token, casbin.ResourceApplications, casbin.ActionUpdate, strings.ToLower(appObject)); !ok {
+		return false
+	}
+	if ok := handler.enforcer.Enforce(token, casbin.ResourceEnvironment, casbin.ActionUpdate, strings.ToLower(envObject)); !ok {
+		return false
+	}
+	return true
 }
