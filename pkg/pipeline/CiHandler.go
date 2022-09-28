@@ -700,18 +700,19 @@ func (impl *CiHandlerImpl) extractWorkfowStatus(workflowStatus v1alpha1.Workflow
 	message := ""
 	logLocation := ""
 	for k, v := range workflowStatus.Nodes {
-		impl.Logger.Infow("extractWorkflowStatus", "workflowName", k, "v", v)
-		workflowName = k
-		podStatus = string(v.Phase)
-		message = v.Message
-		if v.Outputs != nil && len(v.Outputs.Artifacts) > 0 {
-			if v.Outputs.Artifacts[0].S3 != nil {
-				logLocation = v.Outputs.Artifacts[0].S3.Key
-			} else if v.Outputs.Artifacts[0].GCS != nil {
-				logLocation = v.Outputs.Artifacts[0].GCS.Key
+		if v.TemplateName == CI_WORKFLOW_NAME {
+			workflowName = k
+			podStatus = string(v.Phase)
+			message = v.Message
+			if v.Outputs != nil && len(v.Outputs.Artifacts) > 0 {
+				if v.Outputs.Artifacts[0].S3 != nil {
+					logLocation = v.Outputs.Artifacts[0].S3.Key
+				} else if v.Outputs.Artifacts[0].GCS != nil {
+					logLocation = v.Outputs.Artifacts[0].GCS.Key
+				}
 			}
+			break
 		}
-		break
 	}
 	return workflowName, status, podStatus, message, logLocation
 }
