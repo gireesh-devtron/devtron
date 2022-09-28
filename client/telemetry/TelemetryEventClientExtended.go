@@ -50,7 +50,7 @@ func NewTelemetryEventClientImplExtended(logger *zap.SugaredLogger, client *http
 	ciWorkflowRepository pipelineConfig.CiWorkflowRepository, cdWorkflowRepository pipelineConfig.CdWorkflowRepository,
 	dockerArtifactStoreRepository repository.DockerArtifactStoreRepository,
 	materialRepository pipelineConfig.MaterialRepository, ciTemplateRepository pipelineConfig.CiTemplateRepository,
-	chartRepository chartRepoRepository.ChartRepository, moduleRepository moduleRepo.ModuleRepository, serverDataStore *serverDataStore.ServerDataStore) (*TelemetryEventClientImplExtended, error) {
+	chartRepository chartRepoRepository.ChartRepository, moduleRepository moduleRepo.ModuleRepository, userAuditService user.UserAuditService ,serverDataStore *serverDataStore.ServerDataStore) (*TelemetryEventClientImplExtended, error) {
 
 	cron := cron.New(
 		cron.WithChain())
@@ -81,6 +81,7 @@ func NewTelemetryEventClientImplExtended(logger *zap.SugaredLogger, client *http
 			ssoLoginService:  ssoLoginService,
 			PosthogClient:    PosthogClient,
 			moduleRepository: moduleRepository,
+			userAuditService: userAuditService,
 			serverDataStore:  serverDataStore,
 		},
 	}
@@ -136,6 +137,7 @@ type TelemetryEventDto struct {
 	InstallTimedOutIntegrations          []string           `json:"installTimedOutIntegrations,omitempty"`
 	InstallingIntegrations               []string           `json:"installingIntegrations,omitempty"`
 	DevtronReleaseVersion                string             `json:"devtronReleaseVersion,omitempty"`
+	LoginTime                            time.Time          `json:"loginTime,omitempty"`
 }
 
 func (impl *TelemetryEventClientImplExtended) SummaryEventForTelemetry() {
@@ -279,6 +281,12 @@ func (impl *TelemetryEventClientImplExtended) SendSummaryEvent(eventType string)
 	payload.InstallTimedOutIntegrations = installTimedOutIntegrations
 	payload.InstallingIntegrations = installingIntegrations
 	payload.DevtronReleaseVersion = impl.serverDataStore.CurrentVersion
+
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	if err == nil {
+		loginTime := latestUser.CreatedOn
+		payload.LoginTime = loginTime
+	}
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {

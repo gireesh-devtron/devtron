@@ -42,6 +42,7 @@ type TelemetryEventClientImpl struct {
 	ssoLoginService  sso.SSOLoginService
 	PosthogClient    *PosthogClient
 	moduleRepository moduleRepo.ModuleRepository
+	userAuditService user.UserAuditService
 	serverDataStore  *serverDataStore.ServerDataStore
 }
 
@@ -57,7 +58,7 @@ type TelemetryEventClient interface {
 func NewTelemetryEventClientImpl(logger *zap.SugaredLogger, client *http.Client, clusterService cluster.ClusterService,
 	K8sUtil *util2.K8sUtil, aCDAuthConfig *util3.ACDAuthConfig, userService user.UserService,
 	attributeRepo repository.AttributesRepository, ssoLoginService sso.SSOLoginService,
-	PosthogClient *PosthogClient, moduleRepository moduleRepo.ModuleRepository, serverDataStore *serverDataStore.ServerDataStore) (*TelemetryEventClientImpl, error) {
+	PosthogClient *PosthogClient, moduleRepository moduleRepo.ModuleRepository, userAuditService user.UserAuditService ,serverDataStore *serverDataStore.ServerDataStore) (*TelemetryEventClientImpl, error) {
 	cron := cron.New(
 		cron.WithChain())
 	cron.Start()
@@ -70,6 +71,7 @@ func NewTelemetryEventClientImpl(logger *zap.SugaredLogger, client *http.Client,
 		ssoLoginService:  ssoLoginService,
 		PosthogClient:    PosthogClient,
 		moduleRepository: moduleRepository,
+		userAuditService: userAuditService,
 		serverDataStore:  serverDataStore,
 	}
 
@@ -109,6 +111,7 @@ type TelemetryEventEA struct {
 	InstallTimedOutIntegrations []string           `json:"installTimedOutIntegrations,omitempty"`
 	InstallingIntegrations      []string           `json:"installingIntegrations,omitempty"`
 	DevtronReleaseVersion       string             `json:"devtronReleaseVersion,omitempty"`
+	LoginTime                   time.Time          `json:"loginTime,omitempty"`
 }
 
 const DevtronUniqueClientIdConfigMap = "devtron-ucid"
@@ -218,6 +221,12 @@ func (impl *TelemetryEventClientImpl) SendSummaryEvent(eventType string) error {
 	payload.InstallTimedOutIntegrations = installTimedOutIntegrations
 	payload.InstallingIntegrations = installingIntegrations
 	payload.DevtronReleaseVersion = impl.serverDataStore.CurrentVersion
+
+	latestUser, err := impl.userAuditService.GetLatestUser()
+	if err == nil {
+		loginTime := latestUser.CreatedOn
+		payload.LoginTime = loginTime
+	}
 
 	reqBody, err := json.Marshal(payload)
 	if err != nil {
