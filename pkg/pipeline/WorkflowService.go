@@ -510,6 +510,7 @@ func (impl *WorkflowServiceImpl) SubmitWorkflow(workflowRequest *WorkflowRequest
 					SecondsAfterCompletion: &ttl,
 				},
 				Templates: templates,
+				Volumes:   volumes,
 			},
 		}
 	)
