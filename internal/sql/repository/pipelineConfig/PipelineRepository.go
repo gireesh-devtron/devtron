@@ -88,7 +88,8 @@ type PipelineRepository interface {
 	GetConnection() *pg.DB
 	FindAllPipelineInLast24Hour() (pipelines []*Pipeline, err error)
 	FindActiveByEnvId(envId int) (pipelines []*Pipeline, err error)
-	FindActiveByEnvIdAndAppIds(envId int, appIds []int) (pipelines []*Pipeline, err error)
+	FindActiveByInFilter(envId int, appIdIncludes []int) (pipelines []*Pipeline, err error)
+	FindActiveByNotFilter(envId int, appIdExcludes []int) (pipelines []*Pipeline, err error)
 	FindAllPipelinesByChartsOverrideAndAppIdAndChartId(chartOverridden bool, appId int, chartId int) (pipelines []*Pipeline, err error)
 	FindActiveByAppIdAndPipelineId(appId int, pipelineId int) ([]*Pipeline, error)
 	UpdateCdPipeline(pipeline *Pipeline) error
@@ -204,7 +205,6 @@ func (impl PipelineRepositoryImpl) FindByParentCiPipelineId(ciPipelineId int) (p
 
 func (impl PipelineRepositoryImpl) FindActiveByAppId(appId int) (pipelines []*Pipeline, err error) {
 	err = impl.dbConnection.Model(&pipelines).
-		Column("pipeline.*", "Environment").
 		Where("app_id = ?", appId).
 		Where("deleted = ?", false).
 		Select()
@@ -349,17 +349,26 @@ func (impl PipelineRepositoryImpl) FindAllPipelineInLast24Hour() (pipelines []*P
 	return pipelines, err
 }
 func (impl PipelineRepositoryImpl) FindActiveByEnvId(envId int) (pipelines []*Pipeline, err error) {
-	err = impl.dbConnection.Model(&pipelines).
+	err = impl.dbConnection.Model(&pipelines).Column("pipeline.*", "App").
 		Where("environment_id = ?", envId).
 		Where("deleted = ?", false).
 		Select()
 	return pipelines, err
 }
 
-func (impl PipelineRepositoryImpl) FindActiveByEnvIdAndAppIds(envId int, appIds []int) (pipelines []*Pipeline, err error) {
-	err = impl.dbConnection.Model(&pipelines).
+func (impl PipelineRepositoryImpl) FindActiveByInFilter(envId int, appIdIncludes []int) (pipelines []*Pipeline, err error) {
+	err = impl.dbConnection.Model(&pipelines).Column("pipeline.*", "App").
 		Where("environment_id = ?", envId).
-		Where("app_id = ?", pg.In(appIds)).
+		Where("app_id in (?)", pg.In(appIdIncludes)).
+		Where("deleted = ?", false).
+		Select()
+	return pipelines, err
+}
+
+func (impl PipelineRepositoryImpl) FindActiveByNotFilter(envId int, appIdExcludes []int) (pipelines []*Pipeline, err error) {
+	err = impl.dbConnection.Model(&pipelines).Column("pipeline.*", "App").
+		Where("environment_id = ?", envId).
+		Where("app_id not in (?)", pg.In(appIdExcludes)).
 		Where("deleted = ?", false).
 		Select()
 	return pipelines, err
