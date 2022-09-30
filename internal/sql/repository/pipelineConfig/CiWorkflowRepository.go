@@ -68,6 +68,7 @@ type CiWorkflow struct {
 type WorkflowWithArtifact struct {
 	Id                 int               `json:"id"`
 	Name               string            `json:"name"`
+	PodName            string            `json:"podName"`
 	Status             string            `json:"status"`
 	PodStatus          string            `json:"pod_status"`
 	Message            string            `json:"message"`
