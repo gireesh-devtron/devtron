@@ -205,6 +205,7 @@ func (impl PipelineRepositoryImpl) FindByParentCiPipelineId(ciPipelineId int) (p
 
 func (impl PipelineRepositoryImpl) FindActiveByAppId(appId int) (pipelines []*Pipeline, err error) {
 	err = impl.dbConnection.Model(&pipelines).
+		Column("pipeline.*", "Environment").
 		Where("app_id = ?", appId).
 		Where("deleted = ?", false).
 		Select()
