@@ -14,6 +14,7 @@ import (
 	"io"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
+	"sync"
 )
 
 const DEFAULT_CLUSTER = "default_cluster"
@@ -29,6 +30,7 @@ type K8sApplicationService interface {
 	GetResourceInfo() (*ResourceInfo, error)
 	GetRestConfigByClusterId(clusterId int) (*rest.Config, error)
 	GetRestConfigByCluster(cluster *cluster.ClusterBean) (*rest.Config, error)
+	GetManifestsInBatch(request []ResourceRequestBean, batchSize int) []BatchResourceResponse
 }
 type K8sApplicationServiceImpl struct {
 	logger           *zap.SugaredLogger
@@ -63,6 +65,38 @@ type ResourceRequestBean struct {
 
 type ResourceInfo struct {
 	PodName string `json:"podName"`
+}
+
+type BatchResourceResponse struct {
+	ManifestResponse *application.ManifestResponse
+	err              error
+}
+
+func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRequestBean, batchSize int) []BatchResourceResponse {
+	//total batch length
+	requestsLength := len(requests)
+	//final batch responses
+	res := make([]BatchResourceResponse, requestsLength)
+	for i := 0; i < requestsLength; {
+		//requests left to process
+		remainingBatch := requestsLength - i
+		if remainingBatch < batchSize {
+			batchSize = remainingBatch
+		}
+		var wg sync.WaitGroup
+		for j := 0; j < batchSize; j++ {
+			wg.Add(1)
+			go func(j int) {
+				resp := BatchResourceResponse{}
+				resp.ManifestResponse, resp.err = impl.GetResource(&requests[i+j])
+				res[i+j] = resp
+				wg.Done()
+			}(j)
+		}
+		wg.Wait()
+		i += batchSize
+	}
+	return res
 }
 
 func (impl *K8sApplicationServiceImpl) GetResource(request *ResourceRequestBean) (*application.ManifestResponse, error) {
