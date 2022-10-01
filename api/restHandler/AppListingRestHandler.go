@@ -28,6 +28,7 @@ import (
 	"github.com/devtron-labs/devtron/pkg/user/casbin"
 	util2 "github.com/devtron-labs/devtron/util"
 	"github.com/devtron-labs/devtron/util/argo"
+	"github.com/devtron-labs/devtron/util/k8s"
 	"net/http"
 	"strconv"
 	"strings"
@@ -58,6 +59,7 @@ type AppListingRestHandler interface {
 
 	FetchOtherEnvironment(w http.ResponseWriter, r *http.Request)
 	RedirectToLinkouts(w http.ResponseWriter, r *http.Request)
+	GetManifestsByBatch(w http.ResponseWriter, r *http.Request)
 }
 
 type AppListingRestHandlerImpl struct {
@@ -74,6 +76,7 @@ type AppListingRestHandlerImpl struct {
 	clusterService         cluster.ClusterService
 	helmAppService         client.HelmAppService
 	argoUserService        argo.ArgoUserService
+	k8sApplicationService  k8s.K8sApplicationService
 }
 
 type AppStatus struct {
@@ -84,6 +87,16 @@ type AppStatus struct {
 	conditions []v1alpha1.ApplicationCondition
 }
 
+type MaterialRequestBean struct {
+	AppId               int                     `json:"appId"`
+	EnvId               int                     `json:"envId"`
+	ResourceRequestBean k8s.ResourceRequestBean `json:"resourceRequest"`
+}
+
+type BatchRequest struct {
+	requests []MaterialRequestBean
+}
+
 func NewAppListingRestHandlerImpl(application application.ServiceClient,
 	appListingService app.AppListingService,
 	teamService team.TeamService,
@@ -92,7 +105,7 @@ func NewAppListingRestHandlerImpl(application application.ServiceClient,
 	logger *zap.SugaredLogger, enforcerUtil rbac.EnforcerUtil,
 	deploymentGroupService deploymentGroup.DeploymentGroupService, userService user.UserService,
 	helmAppClient client.HelmAppClient, clusterService cluster.ClusterService, helmAppService client.HelmAppService,
-	argoUserService argo.ArgoUserService) *AppListingRestHandlerImpl {
+	argoUserService argo.ArgoUserService, k8sApplicationService k8s.K8sApplicationService) *AppListingRestHandlerImpl {
 	appListingHandler := &AppListingRestHandlerImpl{
 		application:            application,
 		appListingService:      appListingService,
@@ -107,6 +120,7 @@ func NewAppListingRestHandlerImpl(application application.ServiceClient,
 		clusterService:         clusterService,
 		helmAppService:         helmAppService,
 		argoUserService:        argoUserService,
+		k8sApplicationService:  k8sApplicationService,
 	}
 	return appListingHandler
 }
@@ -560,6 +574,76 @@ func (handler AppListingRestHandlerImpl) RedirectToLinkouts(w http.ResponseWrite
 		return
 	}
 	http.Redirect(w, r, link, http.StatusOK)
+}
+
+func (handler AppListingRestHandlerImpl) GetManifestsByBatch(w http.ResponseWriter, r *http.Request) {
+	var batchRequest BatchRequest
+	decoder := json.NewDecoder(r.Body)
+	err := decoder.Decode(&batchRequest)
+	if err != nil {
+		handler.logger.Errorw("error in decoding batch request body", "err", err)
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	//valid batch requests, only valid requests will be sent for batch processing
+	validRequests := make([]k8s.ResourceRequestBean, 0)
+	for _, req := range batchRequest.requests {
+		appId := req.AppId
+		envId := req.EnvId
+		resourceRequestBean := req.ResourceRequestBean
+		appDetail, err := handler.appListingService.FetchAppDetails(appId, envId)
+		if err != nil {
+			handler.logger.Errorw("error occurred while getting app details", "appId", appId)
+			continue
+		}
+		if len(appDetail.AppName) > 0 && len(appDetail.EnvironmentName) > 0 && util.IsAcdApp(appDetail.DeploymentAppType) {
+			//if Argo app get resource tree from argo client and validate the resource details
+			appDetail = handler.fetchResourceTree(w, r, "", appId, envId, appDetail)
+			resourceTree := appDetail.ResourceTree
+			_, ok := resourceTree["nodes"]
+			if !ok {
+				handler.logger.Errorw("no nodes found for this resource tree", "appName", appDetail.AppName, "envName", appDetail.EnvironmentName)
+				continue
+			} else {
+				noOfNodes := len(resourceTree["nodes"].([]interface{}))
+				for i := 0; i < noOfNodes; i++ {
+					resource := resourceTree["nodes"].([]interface{})[i].(map[string]interface{})
+					kind, name, namespace := resource["kind"], resource["name"], resource["namespace"]
+					isSameNamespace := namespace == req.ResourceRequestBean.K8sRequest.ResourceIdentifier.Namespace
+					isSameKind := kind == req.ResourceRequestBean.K8sRequest.ResourceIdentifier.GroupVersionKind.Kind
+					idSameName := name == req.ResourceRequestBean.K8sRequest.ResourceIdentifier.Name
+					if isSameNamespace && isSameKind && idSameName {
+						validRequests = append(validRequests, resourceRequestBean)
+					}
+				}
+			}
+		} else if len(appDetail.AppName) > 0 && len(appDetail.EnvironmentName) > 0 && util.IsHelmApp(appDetail.DeploymentAppType) {
+			//if Helm app validate the resource details via Helm service
+			appIdentifier, err := handler.helmAppService.DecodeAppId(req.ResourceRequestBean.AppId)
+			if err != nil {
+				//continue to next request
+				handler.logger.Errorw("error in decoding appId", "err", err, "appId", req.ResourceRequestBean.AppId)
+				continue
+			}
+			//setting appIdentifier value in request
+			req.ResourceRequestBean.AppIdentifier = appIdentifier
+			valid, err := handler.k8sApplicationService.ValidateResourceRequest(req.ResourceRequestBean.AppIdentifier, req.ResourceRequestBean.K8sRequest)
+			if err != nil || !valid {
+				//if not valid continue since it's not a valid request
+				handler.logger.Errorw("error in validating resource request", "err", err)
+				continue
+			}
+			validRequests = append(validRequests, resourceRequestBean)
+		}
+
+	}
+	if len(validRequests) == 0 {
+		handler.logger.Error("Invalid requests")
+		common.WriteJsonResp(w, err, nil, http.StatusBadRequest)
+		return
+	}
+	resp := handler.k8sApplicationService.GetManifestsInBatch(validRequests, 5)
+	common.WriteJsonResp(w, nil, resp, http.StatusOK)
 }
 
 func (handler AppListingRestHandlerImpl) fetchResourceTree(w http.ResponseWriter, r *http.Request, token string, appId int, envId int, appDetail bean.AppDetailContainer) bean.AppDetailContainer {
