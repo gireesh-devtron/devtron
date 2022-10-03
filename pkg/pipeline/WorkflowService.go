@@ -113,6 +113,7 @@ type WorkflowRequest struct {
 	RefPlugins                 []*bean2.RefPluginObject          `json:"refPlugins"`
 	AppName                    string                            `json:"appName"`
 	TriggerByAuthor            string                            `json:"triggerByAuthor"`
+	DockerBuildOptions         string                   `json:"dockerBuildOptions"`
 }
 
 const (
@@ -284,7 +285,6 @@ func (impl *WorkflowServiceImpl) SubmitWorkflow(workflowRequest *WorkflowRequest
 			},
 		}
 	}
-
 	//getting all cm/cs to be used by default
 	globalCmCsConfigs, err := impl.globalCMCSService.FindAllActive()
 	if err != nil {
