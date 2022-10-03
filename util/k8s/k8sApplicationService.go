@@ -30,7 +30,7 @@ type K8sApplicationService interface {
 	GetResourceInfo() (*ResourceInfo, error)
 	GetRestConfigByClusterId(clusterId int) (*rest.Config, error)
 	GetRestConfigByCluster(cluster *cluster.ClusterBean) (*rest.Config, error)
-	GetManifestsInBatch(request []ResourceRequestBean, batchSize int) []BatchResourceResponse
+	GetManifestsInBatch(request []ResourceRequestAndGroupVersionKind, batchSize int) []BatchResourceResponse
 }
 type K8sApplicationServiceImpl struct {
 	logger           *zap.SugaredLogger
@@ -66,14 +66,22 @@ type ResourceRequestBean struct {
 type ResourceInfo struct {
 	PodName string `json:"podName"`
 }
-
+type ResourceRequestAndGroupVersionKind struct {
+	ResourceRequestBean ResourceRequestBean
+	Group               string
+	Version             string
+	Kind                string
+}
 type BatchResourceResponse struct {
 	ManifestResponse *application.ManifestResponse
 	err              error
 }
 
-func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRequestBean, batchSize int) []BatchResourceResponse {
+func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRequestAndGroupVersionKind, batchSize int) []BatchResourceResponse {
 	//total batch length
+	if requests == nil {
+		impl.logger.Error("Empty requests for getManifestsInBatch")
+	}
 	requestsLength := len(requests)
 	//final batch responses
 	res := make([]BatchResourceResponse, requestsLength)
@@ -85,10 +93,13 @@ func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRe
 		}
 		var wg sync.WaitGroup
 		for j := 0; j < batchSize; j++ {
+			requests[i+j].ResourceRequestBean.K8sRequest.ResourceIdentifier.GroupVersionKind.Group = requests[i+j].Group
+			requests[i+j].ResourceRequestBean.K8sRequest.ResourceIdentifier.GroupVersionKind.Version = requests[i+j].Version
+			requests[i+j].ResourceRequestBean.K8sRequest.ResourceIdentifier.GroupVersionKind.Kind = requests[i+j].Kind
 			wg.Add(1)
 			go func(j int) {
 				resp := BatchResourceResponse{}
-				resp.ManifestResponse, resp.err = impl.GetResource(&requests[i+j])
+				resp.ManifestResponse, resp.err = impl.GetResource(&requests[i+j].ResourceRequestBean)
 				res[i+j] = resp
 				wg.Done()
 			}(j)
