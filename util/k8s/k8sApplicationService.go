@@ -74,7 +74,7 @@ type ResourceRequestAndGroupVersionKind struct {
 }
 type BatchResourceResponse struct {
 	ManifestResponse *application.ManifestResponse
-	err              error
+	Err              error
 }
 
 func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRequestAndGroupVersionKind, batchSize int) []BatchResourceResponse {
@@ -99,7 +99,7 @@ func (impl *K8sApplicationServiceImpl) GetManifestsInBatch(requests []ResourceRe
 			wg.Add(1)
 			go func(j int) {
 				resp := BatchResourceResponse{}
-				resp.ManifestResponse, resp.err = impl.GetResource(&requests[i+j].ResourceRequestBean)
+				resp.ManifestResponse, resp.Err = impl.GetResource(&requests[i+j].ResourceRequestBean)
 				res[i+j] = resp
 				wg.Done()
 			}(j)

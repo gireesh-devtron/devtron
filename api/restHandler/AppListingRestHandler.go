@@ -685,7 +685,60 @@ func (handler AppListingRestHandlerImpl) GetManifestsByBatch(w http.ResponseWrit
 		return
 	}
 	resp := handler.k8sApplicationService.GetManifestsInBatch(validRequests, 5)
-	common.WriteJsonResp(w, nil, resp, http.StatusOK)
+	result := make([]interface{}, 0)
+	for _, res := range resp {
+		err = res.Err
+		if err != nil {
+			continue
+		}
+		urlRes := handler.getUrls(*res.ManifestResponse)
+		result = append(result, urlRes)
+	}
+	common.WriteJsonResp(w, nil, result, http.StatusOK)
+}
+
+type response struct {
+	kind     string
+	name     string
+	pointsTo string
+	urls     []string
+}
+
+func (handler AppListingRestHandlerImpl) getUrls(manifest application1.ManifestResponse) response {
+	kind := manifest.Manifest.GetKind()
+	var res response
+
+	res.kind = kind
+	res.name = manifest.Manifest.GetName()
+	res.pointsTo = ""
+
+	if kind == "Ingress" {
+		urls := make([]string, 0)
+		spec := manifest.Manifest.Object["spec"].(map[string]interface{})
+		rules := spec["rules"].([]interface{})
+		for _, rule := range rules {
+			ruleMap := rule.(map[string]interface{})
+			url := ruleMap["host"].(string)
+			httpPaths := ruleMap["http"].(map[string]interface{})["paths"].([]interface{})
+			for _, httpPath := range httpPaths {
+				path := httpPath.(map[string]interface{})["path"].(string)
+				url = url + path
+				urls = append(urls, url)
+			}
+		}
+	}
+
+	status := manifest.Manifest.Object["status"].(map[string]interface{})
+	loadBalancer := status["loadBalancer"].(map[string]interface{})
+	ingressArray := loadBalancer["ingress"].([]map[string]string)
+	if len(ingressArray) > 0 {
+		if _, ok := ingressArray[0]["hostname"]; ok {
+			res.pointsTo = ingressArray[0]["hostname"]
+		} else {
+			res.pointsTo = ingressArray[0]["ip"]
+		}
+	}
+	return res
 }
 
 func (handler AppListingRestHandlerImpl) fetchResourceTree(w http.ResponseWriter, r *http.Request, token string, appId int, envId int, appDetail bean.AppDetailContainer) bean.AppDetailContainer {
