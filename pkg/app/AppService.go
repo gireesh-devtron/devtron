@@ -112,7 +112,7 @@ type AppServiceImpl struct {
 	chartService                        chart.ChartService
 	argoUserService                     argo.ArgoUserService
 	cdPipelineStatusTimelineRepo        pipelineConfig.PipelineStatusTimelineRepository
-	appCrudOperationService             AppCrudOperationService
+	appCrudOperationService          AppCrudOperationService
 	configMapHistoryRepository          repository3.ConfigMapHistoryRepository
 	strategyHistoryRepository           repository3.PipelineStrategyHistoryRepository
 	deploymentTemplateHistoryRepository repository3.DeploymentTemplateHistoryRepository
@@ -161,7 +161,7 @@ func NewAppService(
 	chartService chart.ChartService, helmAppClient client2.HelmAppClient,
 	argoUserService argo.ArgoUserService,
 	cdPipelineStatusTimelineRepo pipelineConfig.PipelineStatusTimelineRepository,
-	appCrudOperationService AppCrudOperationService,
+	appCrudOperationService          AppCrudOperationService,
 	configMapHistoryRepository repository3.ConfigMapHistoryRepository,
 	strategyHistoryRepository repository3.PipelineStrategyHistoryRepository,
 	deploymentTemplateHistoryRepository repository3.DeploymentTemplateHistoryRepository) *AppServiceImpl {
@@ -207,7 +207,7 @@ func NewAppService(
 		helmAppClient:                       helmAppClient,
 		argoUserService:                     argoUserService,
 		cdPipelineStatusTimelineRepo:        cdPipelineStatusTimelineRepo,
-		appCrudOperationService:             appCrudOperationService,
+		appCrudOperationService:                     appCrudOperationService,
 		configMapHistoryRepository:          configMapHistoryRepository,
 		strategyHistoryRepository:           strategyHistoryRepository,
 		deploymentTemplateHistoryRepository: deploymentTemplateHistoryRepository,
