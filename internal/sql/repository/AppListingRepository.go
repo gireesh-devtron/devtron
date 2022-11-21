@@ -45,7 +45,8 @@ type AppListingRepository interface {
 	PrometheusApiByEnvId(id int) (*string, error)
 
 	FetchOtherEnvironment(appId int) ([]*bean.Environment, error)
-
+	FetchAllActiveInstalledAppsWithAppIdAndName() ([]AppNameTypeIdContainerDBResponse, error)
+	FetchAllActiveDevtronAppsWithAppIdAndName() ([]AppNameTypeIdContainerDBResponse, error)
 	SaveNewDeployment(deploymentStatus *DeploymentStatus, tx *pg.Tx) error
 	SaveNewDeploymentsWithTxn(deploymentStatuses []DeploymentStatus, tx *pg.Tx) error
 	FindLastDeployedStatus(appName string) (DeploymentStatus, error)
@@ -67,6 +68,11 @@ type DeploymentStatus struct {
 	UpdatedOn time.Time `sql:"updated_on"`
 }
 
+type AppNameTypeIdContainerDBResponse struct {
+	AppName string `sql:"app_name"`
+	AppId   int    `sql:"id"`
+}
+
 const NewDeployment string = "Deployment Initiated"
 
 type AppListingRepositoryImpl struct {
@@ -79,10 +85,35 @@ func NewAppListingRepositoryImpl(Logger *zap.SugaredLogger, dbConnection *pg.DB,
 	return &AppListingRepositoryImpl{dbConnection: dbConnection, Logger: Logger, appListingRepositoryQueryBuilder: appListingRepositoryQueryBuilder}
 }
 
+func (impl AppListingRepositoryImpl) FetchAllActiveInstalledAppsWithAppIdAndName() ([]AppNameTypeIdContainerDBResponse, error) {
+	impl.Logger.Debug("reached at Fetch All Active Installed Apps With AppId And Name")
+	var apps []AppNameTypeIdContainerDBResponse
+	query := "select installed_apps.id,app.app_name " + "from app INNER JOIN installed_apps  on app.id = installed_apps.app_id where app.active=true;"
+	_, err := impl.dbConnection.Query(&apps, query)
+	if err != nil {
+		impl.Logger.Errorw("error while fetching installed apps With AppId And Name", "err", err)
+		return apps, err
+	}
+	return apps, nil
+}
+
+func (impl AppListingRepositoryImpl) FetchAllActiveDevtronAppsWithAppIdAndName() ([]AppNameTypeIdContainerDBResponse, error) {
+	impl.Logger.Debug("reached at Fetch All Active Devtron Apps With AppId And Name:")
+	var apps []AppNameTypeIdContainerDBResponse
+	query := "select id,app_name " + "from app where app_store=false and active=true;"
+	_, err := impl.dbConnection.Query(&apps, query)
+	if err != nil {
+		impl.Logger.Errorw("error while fetching active Devtron apps With AppId And Name", "err", err)
+		return apps, err
+	}
+	return apps, nil
+}
+
 /*
 *
 It will return the list of filtered apps with details related to each env
 */
+
 func (impl AppListingRepositoryImpl) FetchAppsByEnvironment(appListingFilter helper.AppListingFilter) ([]*bean.AppEnvironmentContainer, error) {
 	impl.Logger.Debug("reached at FetchAppsByEnvironment:")
 	var appEnvArr []*bean.AppEnvironmentContainer
@@ -441,12 +472,13 @@ func (impl AppListingRepositoryImpl) FetchOtherEnvironment(appId int) ([]*bean.E
 
 	// other environment tab
 	var otherEnvironments []*bean.Environment
-	query := "SELECT p.environment_id,env.environment_name, env_app_m.app_metrics, env.default as prod, env_app_m.infra_metrics from pipeline p" +
+	query := "SELECT p.environment_id,env.environment_name, p.last_deployed,  env_app_m.app_metrics, env.default as prod, env_app_m.infra_metrics from" +
+		" (SELECT pl.id,pl.app_id,pl.environment_id,pl.deleted,MAX(pco.created_on) as last_deployed from pipeline pl LEFT JOIN pipeline_config_override pco on pco.pipeline_id = pl.id WHERE pl.app_id=? and pl.deleted = FALSE GROUP BY pl.id) p" +
 		" INNER JOIN environment env on env.id=p.environment_id" +
 		" LEFT JOIN env_level_app_metrics env_app_m on env.id=env_app_m.env_id and p.app_id = env_app_m.app_id" +
-		" where p.app_id=? and p.deleted = FALSE AND env.active = TRUE GROUP by 1,2,3,4, 5"
+		" where p.app_id=? and p.deleted = FALSE AND env.active = TRUE GROUP BY 1,2,3,4,5,6"
 	impl.Logger.Debugw("other env query:", query)
-	_, err := impl.dbConnection.Query(&otherEnvironments, query, appId)
+	_, err := impl.dbConnection.Query(&otherEnvironments, query, appId, appId)
 	if err != nil {
 		impl.Logger.Error("error in fetching other environment", "error", err)
 	}
