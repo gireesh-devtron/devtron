@@ -127,7 +127,7 @@ func (impl *ChartRepositoryServiceImpl) CreateChartRepo(request *ChartRepoDto) (
 		if err != nil {
 			return nil, err
 		}
-		data := impl.updateData(cm.Data, request)
+		data := impl.updateData(cm.Data, request, "")
 		cm.Data = data
 		_, err = impl.K8sUtil.UpdateConfigMap(impl.aCDAuthConfig.ACDConfigMapNamespace, cm, client)
 		if err != nil {
@@ -161,7 +161,14 @@ func (impl *ChartRepositoryServiceImpl) UpdateChartRepo(request *ChartRepoDto) (
 	if err != nil && !util.IsErrNoRows(err) {
 		return nil, err
 	}
-
+	deleteByName := ""
+	repoCountWithName, err := impl.repoRepository.FindActiveCountWithRepoName(chartRepo.Name)
+	if err != nil && !util.IsErrNoRows(err) {
+		impl.logger.Errorw("error in Finding active repos with name", "name", chartRepo.Name, "err", err)
+	}
+	if repoCountWithName == 1 {
+		deleteByName = chartRepo.Name
+	}
 	chartRepo.Url = request.Url
 	chartRepo.AuthMode = request.AuthMode
 	chartRepo.UserName = request.UserName
@@ -200,7 +207,7 @@ func (impl *ChartRepositoryServiceImpl) UpdateChartRepo(request *ChartRepoDto) (
 		if err != nil {
 			return nil, err
 		}
-		data := impl.updateData(cm.Data, request)
+		data := impl.updateData(cm.Data, request, deleteByName)
 		cm.Data = data
 		_, err = impl.K8sUtil.UpdateConfigMap(impl.aCDAuthConfig.ACDConfigMapNamespace, cm, client)
 		if err != nil {
@@ -460,7 +467,8 @@ func (impl *ChartRepositoryServiceImpl) createRepoElement(request *ChartRepoDto)
 
 	return repoData
 }
-func (impl *ChartRepositoryServiceImpl) deleteData(data map[string]string, request *ChartRepoDto) map[string]string {
+
+func (impl *ChartRepositoryServiceImpl) updateData(data map[string]string, request *ChartRepoDto, deleteByName string) map[string]string {
 	helmRepoStr := data["helm.repositories"]
 	helmRepoByte, err := yaml.YAMLToJSON([]byte(helmRepoStr))
 	if err != nil {
@@ -483,6 +491,7 @@ func (impl *ChartRepositoryServiceImpl) deleteData(data map[string]string, reque
 
 	//SETUP for repositories
 	var repositories []*AcdConfigMapRepositoriesDto
+	var finalRepositories []*AcdConfigMapRepositoriesDto
 	repoStr := data["repositories"]
 	repoByte, err := yaml.YAMLToJSON([]byte(repoStr))
 	if err != nil {
@@ -493,73 +502,12 @@ func (impl *ChartRepositoryServiceImpl) deleteData(data map[string]string, reque
 		panic(err)
 	}
 
-	var newRepositories []*AcdConfigMapRepositoriesDto
 	found := false
 	for _, item := range repositories {
-		//if request chart repo not found, exclude it for the first time
-		if !found && item.Name == request.Name {
-			found = true
+
+		if item.Name == deleteByName {
 			continue
 		}
-		newRepositories = append(newRepositories, item)
-
-	}
-
-	rb, err = json.Marshal(newRepositories)
-	if err != nil {
-		panic(err)
-	}
-	repositoriesYamlByte, err := yaml.JSONToYAML(rb)
-	if err != nil {
-		panic(err)
-	}
-
-	if len(helmRepositoriesYamlByte) > 0 {
-		data["helm.repositories"] = string(helmRepositoriesYamlByte)
-	}
-	if len(repositoriesYamlByte) > 0 {
-		data["repositories"] = string(repositoriesYamlByte)
-	}
-	//dex config copy as it is
-	dexConfigStr := data["dex.config"]
-	data["dex.config"] = string([]byte(dexConfigStr))
-	return data
-}
-func (impl *ChartRepositoryServiceImpl) updateData(data map[string]string, request *ChartRepoDto) map[string]string {
-	helmRepoStr := data["helm.repositories"]
-	helmRepoByte, err := yaml.YAMLToJSON([]byte(helmRepoStr))
-	if err != nil {
-		panic(err)
-	}
-	var helmRepositories []*AcdConfigMapRepositoriesDto
-	err = json.Unmarshal(helmRepoByte, &helmRepositories)
-	if err != nil {
-		panic(err)
-	}
-
-	rb, err := json.Marshal(helmRepositories)
-	if err != nil {
-		panic(err)
-	}
-	helmRepositoriesYamlByte, err := yaml.JSONToYAML(rb)
-	if err != nil {
-		panic(err)
-	}
-
-	//SETUP for repositories
-	var repositories []*AcdConfigMapRepositoriesDto
-	repoStr := data["repositories"]
-	repoByte, err := yaml.YAMLToJSON([]byte(repoStr))
-	if err != nil {
-		panic(err)
-	}
-	err = json.Unmarshal(repoByte, &repositories)
-	if err != nil {
-		panic(err)
-	}
-
-	found := false
-	for _, item := range repositories {
 		//if request chart repo found, than update its values
 		if item.Name == request.Name {
 			if request.AuthMode == repository.AUTH_MODE_USERNAME_PASSWORD {
@@ -576,15 +524,16 @@ func (impl *ChartRepositoryServiceImpl) updateData(data map[string]string, reque
 			item.Url = request.Url
 			found = true
 		}
+		finalRepositories = append(finalRepositories, item)
 	}
 
 	// if request chart repo not found, add new one
 	if !found {
 		repoData := impl.createRepoElement(request)
-		repositories = append(repositories, repoData)
+		repositories = append(finalRepositories, repoData)
 	}
 
-	rb, err = json.Marshal(repositories)
+	rb, err = json.Marshal(finalRepositories)
 	if err != nil {
 		panic(err)
 	}
@@ -663,7 +612,7 @@ func (impl *ChartRepositoryServiceImpl) DeleteChartRepo(request *ChartRepoDto) e
 			if err != nil {
 				return err
 			}
-			data := impl.deleteData(cm.Data, request)
+			data := impl.updateData(cm.Data, request, chartRepo.Name)
 			cm.Data = data
 			_, err = impl.K8sUtil.UpdateConfigMap(impl.aCDAuthConfig.ACDConfigMapNamespace, cm, client)
 			if err != nil {
